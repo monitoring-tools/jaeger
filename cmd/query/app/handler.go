@@ -121,6 +121,7 @@ func NewAPIHandler(spanReader spanstore.Reader, dependencyReader dependencystore
 
 // RegisterRoutes registers routes for this handler on the given router
 func (aH *APIHandler) RegisterRoutes(router *mux.Router) {
+	aH.handleFunc(router, aH.searchTraceIDs, "/traces/ids").Methods(http.MethodGet)
 	aH.handleFunc(router, aH.getTrace, "/traces/{%s}", traceIDParam).Methods(http.MethodGet)
 	aH.handleFunc(router, aH.archiveTrace, "/archive/{%s}", traceIDParam).Methods(http.MethodPost)
 	aH.handleFunc(router, aH.search, "/traces").Methods(http.MethodGet)
@@ -194,6 +195,28 @@ func (aH *APIHandler) getOperations(w http.ResponseWriter, r *http.Request) {
 	structuredRes := structuredResponse{
 		Data:  operations,
 		Total: len(operations),
+	}
+	aH.writeJSON(w, r, &structuredRes)
+}
+
+func (aH *APIHandler) searchTraceIDs(w http.ResponseWriter, r *http.Request) {
+	tQuery, err := aH.queryParser.parse(r)
+	if aH.handleError(w, err, http.StatusBadRequest) {
+		return
+	}
+
+	traceIDsFromStorage, err := aH.spanReader.FindTraceIDs(r.Context(), &tQuery.TraceQueryParameters)
+	if aH.handleError(w, err, http.StatusInternalServerError) {
+		return
+	}
+
+	traceIDs := make([]string, len(traceIDsFromStorage))
+	for i, v := range traceIDsFromStorage {
+		traceIDs[i] = v.String()
+	}
+
+	structuredRes := structuredResponse{
+		Data: traceIDs,
 	}
 	aH.writeJSON(w, r, &structuredRes)
 }
